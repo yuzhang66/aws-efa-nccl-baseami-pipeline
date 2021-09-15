@@ -4,24 +4,18 @@
     "flag": "eks-1.19",
     "subnet_id": "subnet-9c36a2fa",
     "security_groupids": "sg-01bdad9fe532188a0,sg-42c7a849",
-    "build_ami": "ami-09d5097f0b2e9bc30",
-    "efa_pkg": "aws-efa-installer-latest.tar.gz",
-    "intel_mkl_version": "intel-mkl-2020.0-088",
-    "nvidia_version": "nvidia-fabricmanager-470 nvidia-driver-branch-470",
-    "cuda_version": "cuda-toolkit-11-4",
-    "cudnn_version": "libcudnn8",
-    "nccl_version": "v2.10.3-1"
+    "build_ami": "ami-09d5097f0b2e9bc30"
   },
   "builders": [{
     "type": "amazon-ebs",
     "region": "{{user `region`}}",
     "source_ami": "{{user `build_ami`}}",
     "run_tags": {
-        "Name": "packer-gpu-processor-{{user `flag`}}"
+        "Name": "packer-xilinx-processor-{{user `flag`}}"
     },
     "subnet_id": "{{user `subnet_id`}}",
     "security_group_ids": "{{user `security_groupids`}}",
-    "instance_type": "g4dn.8xlarge",
+    "instance_type": "m4.large",
     "ssh_username": "ec2-user",
     "ami_name": "al2-fpga-test-ami_{{user `flag`}}-{{timestamp}}",
     "launch_block_device_mappings":[{
@@ -37,15 +31,12 @@
     "type": "shell",
     "expect_disconnect": true,
     "inline": [
-      "sudo  yum update -y",
-      "sudo amazon-linux-extras install lustre2.10 epel -y",
+      "sudo yum update -y",
+      "sudo yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm -y",
       "sudo yum install yum-utils cmake sipcalc dkms mdadm git htop hwloc iftop kernel-tools rpm-build rpmdevtools numactl parallel pigz python2-pip python3-pip wget kernel-devel-$(uname -r) kernel-headers-$(uname -r) -y",
-      "sudo yum groupinstall 'Development Tools' -y",
+      "sudo yum install boost-devel -y",
+      "sudo yum install gcc-c++ -y",
       "uname -r",
-      "echo 'blacklist nouveau' | sudo tee /etc/modprobe.d/nvidia-graphics-drivers.conf",
-      "echo 'blacklist lbm-nouveau' | sudo tee -a /etc/modprobe.d/nvidia-graphics-drivers.conf",
-      "echo 'alias nouveau off' | sudo tee -a /etc/modprobe.d/nvidia-graphics-drivers.conf",
-      "echo 'alias lbm-nouveau off' | sudo tee -a /etc/modprobe.d/nvidia-graphics-drivers.conf",
       "sudo shutdown -r now"]
     },
     {
@@ -61,7 +52,10 @@
     "type": "shell",
     "inline_shebang": "/bin/bash -xe",
     "inline": [
-      "sudo yum install kernel-devel-$(uname -r) kernel-headers-$(uname -r) -y"
+      "sudo yum install kernel-devel-$(uname -r) kernel-headers-$(uname -r) -y",
+      "git clone https://github.com/Xilinx/video-sdk",
+      "cd ./video-sdk/release/U30_Amazon_2.0_v1.5_20210827/",
+      "./install.sh -sw"
       ]
     }
   ]

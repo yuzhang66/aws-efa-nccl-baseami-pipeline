@@ -1,10 +1,10 @@
 {
   "variables": {
     "region": "us-east-1",
-    "flag": "ecs",
+    "flag": "eks-1.19",
     "subnet_id": "subnet-9c36a2fa",
     "security_groupids": "sg-01bdad9fe532188a0,sg-42c7a849",
-    "build_ami": "ami-0be13a99cd970f6a9",
+    "build_ami": "ami-09d5097f0b2e9bc30",
     "efa_pkg": "aws-efa-installer-latest.tar.gz",
     "intel_mkl_version": "intel-mkl-2020.0-088",
     "nvidia_version": "nvidia-fabricmanager-470 nvidia-driver-branch-470",
@@ -27,7 +27,7 @@
     "launch_block_device_mappings":[{
       "delete_on_termination": true,
       "device_name": "/dev/xvda",
-      "volume_size": 100,
+      "volume_size": 200,
       "throughput": 1000,
       "iops": 8000,
       "volume_type": "gp3"
@@ -39,27 +39,14 @@
     "inline": [
       "sudo  yum update -y",
       "sudo amazon-linux-extras install lustre2.10 epel -y",
-      "sudo yum install python3 yum-utils cmake dkms mdadm git htop hwloc iftop kernel-tools rpm-build rpmdevtools numactl parallel pigz python3-distutils wget kernel-devel-$(uname -r) kernel-headers-$(uname -r) -y",
+      "sudo yum install yum-utils cmake sipcalc dkms mdadm git htop hwloc iftop kernel-tools rpm-build rpmdevtools numactl parallel pigz python2-pip python3-pip wget kernel-devel-$(uname -r) kernel-headers-$(uname -r) -y",
       "sudo yum groupinstall 'Development Tools' -y",
-      "curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && sudo python3 /tmp/get-pip.py",
       "uname -r",
       "echo 'blacklist nouveau' | sudo tee /etc/modprobe.d/nvidia-graphics-drivers.conf",
       "echo 'blacklist lbm-nouveau' | sudo tee -a /etc/modprobe.d/nvidia-graphics-drivers.conf",
       "echo 'alias nouveau off' | sudo tee -a /etc/modprobe.d/nvidia-graphics-drivers.conf",
       "echo 'alias lbm-nouveau off' | sudo tee -a /etc/modprobe.d/nvidia-graphics-drivers.conf",
       "sudo shutdown -r now"]
-    },
-    {
-    "type": "shell",
-    "inline": [
-      "uname -r",
-      "wget -O /tmp/awscli2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip",
-      "cd /tmp && sudo unzip /tmp/awscli2.zip",
-      "sudo /tmp/aws/install",
-      "aws configure set default.s3.max_concurrent_requests 100",
-      "aws configure set default.s3.max_queue_size 10000",
-      "aws configure set default.s3.multipart_threshold 64MB",
-      "aws configure set default.s3.multipart_chunksize 16MB"]
     },
     {
     "type": "shell",
@@ -79,7 +66,7 @@
       "sudo yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo",
       "sudo yum clean all",
       "sudo yum -y install {{user `nvidia_version`}}",
-      "sudo yum -y install {{user `cuda_version`}} {{user `cudnn_version`}} {{user `cudnn_version`}}-devel",
+      "sudo yum -y install {{user `cuda_version`}}",
       "echo -e '#!/bin/sh\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64\nexport PATH=$PATH:/usr/local/cuda/bin' | sudo tee /etc/profile.d/cuda.sh",
       "sudo systemctl enable nvidia-fabricmanager",
       "sudo chmod +x /etc/rc.local"]
@@ -89,12 +76,11 @@
     "inline_shebang": "/bin/bash -xe",
     "inline": [
       "distribution=$(. /etc/os-release;echo $ID$VERSION_ID)",
-      "sudo amazon-linux-extras install docker -y",
+      "sudo amazon-linux-extras install docker",
       "sudo systemctl enable docker",
       "curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.repo | sudo tee /etc/yum.repos.d/nvidia-docker.repo",
       "sudo yum install -y nvidia-container-toolkit nvidia-docker2",
-      "sudo sed -i 's/^OPTIONS/#&/' /etc/sysconfig/docker",
-      "echo -e '{\"default-ulimits\":{\"memlock\":{\"Name\":\"memlock\",\"Soft\":-1,\"Hard\":-1}},\"default-runtime\":\"nvidia\",\"runtimes\":{\"nvidia\":{\"path\":\"nvidia-container-runtime\",\"runtimeArgs\":[]}}}' | sudo tee /etc/docker/daemon.json",
+      "echo -e '{\"default-ulimits\":{\"memlock\":{\"Name\":\"memlock\",\"Soft\":-1,\"Hard\":-1}},\"default-runtime\":\"nvidia\",\"runtimes\":{\"nvidia\":{\"path\":\"nvidia-container-runtime\",\"runtimeArgs\":[]}}}' | sudo tee /etc/docker/daemon.json",      
       "sudo systemctl restart docker",
       "sudo usermod -aG docker ec2-user"]
     },
@@ -143,11 +129,22 @@
       "sudo mv /tmp/aws-gpu-boost-clock.service /lib/systemd/system",
       "sudo systemctl enable aws-gpu-boost-clock.service && sudo systemctl start aws-gpu-boost-clock.service"]
     },
+    { 
+    "type": "shell",
+    "inline_shebang": "/bin/bash -xe",
+    "inline": [
+      "sudo mkdir -p /opt/mig",
+      "echo -e '#!/bin/bash\nMIG_PARTITION=7' | sudo tee /etc/default/mig",
+      "wget -O /tmp/create_mig.sh 'https://github.com/aws-samples/aws-efa-nccl-baseami-pipeline/raw/master/nvidia-efa-ami_base/mig/create_mig.sh'",
+      "wget -O /tmp/aws-gpu-mig.service 'https://github.com/aws-samples/aws-efa-nccl-baseami-pipeline/raw/master/nvidia-efa-ami_base/mig/aws-gpu-mig.service'",
+      "sudo mv /tmp/create_mig.sh /opt/mig/ && sudo chmod +x /opt/mig/create_mig.sh",
+      "sudo mv /tmp/aws-gpu-mig.service /lib/systemd/system"]
+    },
     {
     "type": "shell",
     "inline_shebang": "/bin/bash -xe",
     "inline": [
-      "sudo /usr/local/bin/pip3 install boto3",
+      "sudo /usr/bin/pip3 install boto3",
       "sudo mkdir -p /opt/aws",
       "sudo yum install amazon-cloudwatch-agent -y",
       "git clone https://github.com/aws-samples/aws-efa-nccl-baseami-pipeline.git /tmp/aws-efa-nccl-baseami",
